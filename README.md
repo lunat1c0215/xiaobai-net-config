@@ -2,7 +2,7 @@
 
 Windows 桌面工具：通过 BLE 扫描兼容的小白盒子、读取盒子可见的 Wi-Fi 网络，并下发 Wi-Fi 配网；配网成功后可在局域网内查找盒子 IP，并将指定 Windows 打印机队列的 TCP/IP 端口同步到该 IP。
 
-> **版本：1.0.0** · Windows 10/11 · 当前版本面向 XB900WB / XB94* 系列设备；不同硬件/固件版本请先在自己的设备上验证。
+> **版本：1.0.0** · Windows 10/11 · 支持 XB900WB / XB94* 系列设备。
 
 ## 功能
 
@@ -14,7 +14,7 @@ Windows 桌面工具：通过 BLE 扫描兼容的小白盒子、读取盒子可�
 
 ## 获取与运行
 
-从 GitHub Releases 下载 `小白盒子配网工具-1.0.0.exe` 和 `ble_config.py`，把两者放在同一目录后运行 EXE。首次启动会在该目录创建 `wifi_history.json` 保存本机的 Wi-Fi 历史。该文件已被 `.gitignore` 排除，不应提交或分享。
+从 GitHub Releases 下载 `小白盒子配网工具-1.0.0.exe` 和 `ble_config.py`，把两者放在同一目录后运行 EXE。首次启动会在该目录创建 `wifi_history.json`，用于保存本机的 Wi-Fi 历史。
 
 ### 运行依赖
 
@@ -63,7 +63,7 @@ python .\ble_config.py --only-sync --printer-name "Windows打印机队列名"
 
 - GUI 将密码用 Windows DPAPI `CurrentUser` 范围加密后保存到 `wifi_history.json`；设计上仅可由当前 Windows 用户账户解密。卸载/更换 Windows 账户后，旧记录可能无法解密。
 - 文件中仍包含 Wi-Fi 名称和记录时间。可关闭程序后删除 `wifi_history.json` 清除本机历史；此操作不会影响路由器配置。
-- 仓库 `.gitignore` 明确排除该文件、网页抓取快照及反编译输出。请不要把本机历史文件加入版本控制。
+- 仓库 `.gitignore` 排除该文件、网页抓取快照及反编译输出。
 
 ## 仓库内容
 
@@ -89,13 +89,13 @@ Invoke-ps2exe .\xiaobai_gui.ps1 .\dist\小白盒子配网工具-1.0.0.exe `
 
 后端仍作为旁置 `ble_config.py` 使用，运行机器仍需 Python 与 `bleak`。Release 的 EXE 与后端脚本需要一起下载/放置。
 
-## 支持范围与排错
+## 故障排查
 
 - **扫描不到盒子**：确认盒子已上电、蓝牙可发现、处于待配网状态；靠近电脑后重试，并检查 Windows 蓝牙是否开启。
 - **盒子没有连上 Wi-Fi**：核对 SSID/密码和路由器频段/加密兼容性；可重新扫描并再次配网。错误密码可能导致盒子暂时失联。
 - **未找到新 IP / 端口同步失败**：确认电脑与盒子在同一局域网、允许设备发现；确认 Windows 中的打印机队列名称正确，并检查权限和防火墙设置。
 - **后端启动失败**：确认 `python --version` 可用、`python -m pip show bleak` 能找到依赖，并将 EXE 与 `ble_config.py` 放在同一目录。
 
-## 免责声明与贡献
+## 贡献
 
-设备型号、固件、蓝牙栈和打印机驱动的差异可能影响结果。配网前请核对目标网络；该工具不保证适用于未验证的设备或网络环境。欢迎通过 GitHub Issues 报告可复现的问题或提交改进。
+欢迎通过 GitHub Issues 报告问题或提交改进。
