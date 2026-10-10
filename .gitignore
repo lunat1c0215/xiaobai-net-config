@@ -1,0 +1,24 @@
+# 本机运行数据与凭据
+wifi_history.json
+*.pwd
+*.credential
+.env
+
+# 网页抓取快照（非本项目源码）
+bing_*.html
+bing_text.txt
+s*.html
+
+# 反编译输出产物
+btvm*.txt
+setpwd.txt
+*.dex
+
+# Python / 编辑器 / 临时日志
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.vscode/
+.idea/
+*.log
