@@ -14,6 +14,11 @@ btvm*.txt
 setpwd.txt
 *.dex
 
+# 构建产物
+build/
+dist/
+*.spec
+
 # Python / 编辑器 / 临时日志
 __pycache__/
 *.py[cod]
