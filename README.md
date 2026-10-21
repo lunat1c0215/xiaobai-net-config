@@ -5,7 +5,7 @@
 
 ## 下载
 
-[GitHub Releases](https://github.com/lunat1c0215/xiaobai-net-config/releases/latest) → `xiaobai-net-config-2.0.0.zip`
+[GitHub Releases](https://github.com/lunat1c0215/xiaobai-net-config/releases/latest) → `xiaobai-net-config-2.0.1.zip`
 
 ## 分发形态
 
@@ -15,6 +15,7 @@
   xiaobai_gui.ps1          WinForms 界面
   启动小白配网工具.vbs      无黑窗口启动器
   修复打印队列.ps1          作业卡死时才用
+  使用说明.html            完整图文说明（面板按钮直接打开）
   发布说明.txt
 ```
 
@@ -111,5 +112,6 @@ XiaobaiBox.exe --watch                     # 守护：IP 变化自动修端口
 ## 已知边界
 
 - 盒子 USB 是单向转发：没有打印机也照收 TCP 数据，所以“发送成功”不等于“出纸”。
+- **盒子只支持 2.4GHz**：用手机热点时必须在设置里切到 2.4GHz（iPhone 打开「最大兼容性」），5GHz 连不上。
 - 手机热点若开 AP 隔离，盒子能上网但电脑找不到它，工具无解，只能换网络形态（USB 共享 / 关隔离）。
 - 驱动是 PCL3，不能发纯文本测试页；测试请用驱动渲染，或用 Word 打一页。

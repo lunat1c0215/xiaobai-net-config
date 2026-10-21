@@ -170,17 +170,22 @@ $chkOpen.Size = New-Object System.Drawing.Size(150, 22)
 $btnCfg = New-Object System.Windows.Forms.Button
 $btnCfg.Text = '配网 + 同步打印机'
 $btnCfg.Location = New-Object System.Drawing.Point(12, 298)
-$btnCfg.Size = New-Object System.Drawing.Size(170, 34)
+$btnCfg.Size = New-Object System.Drawing.Size(160, 34)
 
 $btnSync = New-Object System.Windows.Forms.Button
 $btnSync.Text = '仅同步打印机端口'
-$btnSync.Location = New-Object System.Drawing.Point(192, 298)
-$btnSync.Size = New-Object System.Drawing.Size(160, 34)
+$btnSync.Location = New-Object System.Drawing.Point(180, 298)
+$btnSync.Size = New-Object System.Drawing.Size(150, 34)
 
 $btnDoctor = New-Object System.Windows.Forms.Button
 $btnDoctor.Text = '体检（打不出来）'
-$btnDoctor.Location = New-Object System.Drawing.Point(362, 298)
-$btnDoctor.Size = New-Object System.Drawing.Size(150, 34)
+$btnDoctor.Location = New-Object System.Drawing.Point(338, 298)
+$btnDoctor.Size = New-Object System.Drawing.Size(140, 34)
+
+$btnHelp = New-Object System.Windows.Forms.Button
+$btnHelp.Text = '使用说明'
+$btnHelp.Location = New-Object System.Drawing.Point(486, 298)
+$btnHelp.Size = New-Object System.Drawing.Size(122, 34)
 
 $lblQueue = New-Object System.Windows.Forms.Label
 $lblQueue.Text = 'Word 里选：自动识别中…'
@@ -219,7 +224,7 @@ $statusLabel.Text = '就绪'
 $status.Items.Add($statusLabel) | Out-Null
 
 $form.Controls.AddRange(@($btnScan, $lblBox, $lblList, $lst, $lblPwd, $txtPwd,
-                          $chkOpen, $btnCfg, $btnSync, $btnDoctor, $lblQueue,
+                          $chkOpen, $btnCfg, $btnSync, $btnDoctor, $btnHelp, $lblQueue,
                           $lblProg, $prog, $lblLog, $txtLog, $status))
 
 $timer = New-Object System.Windows.Forms.Timer
@@ -499,6 +504,20 @@ $btnSync.Add_Click({
 $btnDoctor.Add_Click({
     $script:txtLog.Clear()
     Start-Task -PyArgs @('--doctor', '--json') -Mode 'doctor' -BusyText '正在体检打印链路（约 5 秒）...'
+})
+
+$btnHelp.Add_Click({
+    $doc = Join-Path $script:Dir '使用说明.html'
+    if (Test-Path -LiteralPath $doc) {
+        Start-Process -FilePath $doc
+    } else {
+        $txt = Join-Path $script:Dir '发布说明.txt'
+        if (Test-Path -LiteralPath $txt) { Start-Process -FilePath $txt; return }
+        [System.Windows.Forms.MessageBox]::Show(
+            "找不到 使用说明.html。`n`n请确认它和本程序在同一个文件夹里。",
+            '使用说明', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+    }
 })
 
 # 选中列表里的 Wi-Fi -> 有记忆就自动填密码
