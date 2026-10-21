@@ -8,10 +8,10 @@ Add-Type -AssemblyName System.Security
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $script:Dir      = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
-$script:PyScript = Join-Path $script:Dir 'ble_config.py'
+$script:PyScript = Join-Path $script:Dir 'xiaobai_box.py'
 $script:JsonOut  = Join-Path $env:TEMP 'xb_ble_result.json'
 $script:LogOut   = Join-Path $env:TEMP 'xb_ble_log.txt'
-$script:HistFile = Join-Path $script:Dir 'wifi_history.json'
+$script:HistFile = Join-Path $env:LOCALAPPDATA 'XiaobaiBox\wifi_history.json'
 $script:Ps       = $null
 $script:Async    = $null
 $script:Running  = $false
@@ -20,9 +20,51 @@ $script:Hist     = @()
 $script:LastSsid = ''
 $script:LastPwd  = ''
 $script:Mark     = ' ✓'
+$script:Engine   = $null
 
-if (-not (Test-Path -LiteralPath $script:PyScript)) {
-    [System.Windows.Forms.MessageBox]::Show("找不到 ble_config.py：`n$($script:PyScript)", '小白盒子配网工具')
+# 分发时优先用同目录自带的 exe；只有开发机才回退到 python
+function Resolve-Engine {
+    foreach ($sub in @('', 'dist_new', '发布')) {
+        $exe = if ($sub) { Join-Path $script:Dir "$sub\XiaobaiBox.exe" } else { Join-Path $script:Dir 'XiaobaiBox.exe' }
+        if (Test-Path -LiteralPath $exe) {
+            return @{ Path = $exe; Pre = @() }
+        }
+    }
+    $cands = @()
+    $cmd = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($cmd) { $cands += $cmd.Source }
+    $cands += @(
+        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "$env:ProgramFiles\Python311\python.exe",
+        "$env:ProgramFiles\Python312\python.exe")
+    foreach ($p in $cands) {
+        if (-not (Test-Path -LiteralPath $p)) { continue }
+        try {
+            $v = & $p --version 2>&1
+            if ($LASTEXITCODE -eq 0 -and "$v" -match 'Python 3') {
+                if (-not (Test-Path -LiteralPath $script:PyScript)) { continue }
+                return @{ Path = $p; Pre = @($script:PyScript) }
+            }
+        } catch {
+            continue
+        }
+    }
+    return $null
+}
+
+$script:Engine = Resolve-Engine
+$null = New-Item -ItemType Directory -Force -Path (Split-Path $script:HistFile) -ErrorAction SilentlyContinue
+# 旧版本把记忆放在程序目录，迁移一次
+$script:OldHist = Join-Path $script:Dir 'wifi_history.json'
+if (-not (Test-Path -LiteralPath $script:HistFile) -and (Test-Path -LiteralPath $script:OldHist)) {
+    try { Copy-Item -LiteralPath $script:OldHist -Destination $script:HistFile -Force } catch { }
+}
+
+if (-not $script:Engine) {
+    [System.Windows.Forms.MessageBox]::Show(
+        "找不到运行引擎。`n`n请把 XiaobaiBox.exe 放在本工具同一目录，`n或安装 Python 3.11+ 后重试。",
+        '小白盒子配网工具')
     exit 1
 }
 
@@ -83,7 +125,7 @@ function Raw-Ssid([string]$item) {
 # ---------------- UI ----------------
 $form = New-Object System.Windows.Forms.Form
 $form.Text          = '小白盒子配网工具'
-$form.ClientSize    = New-Object System.Drawing.Size(620, 578)
+$form.ClientSize    = New-Object System.Drawing.Size(620, 642)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox   = $false
@@ -135,25 +177,36 @@ $btnSync.Text = '仅同步打印机端口'
 $btnSync.Location = New-Object System.Drawing.Point(192, 298)
 $btnSync.Size = New-Object System.Drawing.Size(160, 34)
 
+$btnDoctor = New-Object System.Windows.Forms.Button
+$btnDoctor.Text = '体检（打不出来）'
+$btnDoctor.Location = New-Object System.Drawing.Point(362, 298)
+$btnDoctor.Size = New-Object System.Drawing.Size(150, 34)
+
+$lblQueue = New-Object System.Windows.Forms.Label
+$lblQueue.Text = 'Word 里选：自动识别中…'
+$lblQueue.Location = New-Object System.Drawing.Point(12, 382)
+$lblQueue.Size = New-Object System.Drawing.Size(592, 18)
+$lblQueue.ForeColor = [System.Drawing.Color]::SteelBlue
+
 $lblProg = New-Object System.Windows.Forms.Label
 $lblProg.Text = '进度'
-$lblProg.Location = New-Object System.Drawing.Point(12, 346)
+$lblProg.Location = New-Object System.Drawing.Point(12, 414)
 $lblProg.Size = New-Object System.Drawing.Size(60, 18)
 
 $prog = New-Object System.Windows.Forms.ProgressBar
-$prog.Location = New-Object System.Drawing.Point(60, 344)
+$prog.Location = New-Object System.Drawing.Point(60, 412)
 $prog.Size = New-Object System.Drawing.Size(544, 20)
 $prog.Minimum = 0
 $prog.Maximum = 100
 
 $lblLog = New-Object System.Windows.Forms.Label
 $lblLog.Text = '日志'
-$lblLog.Location = New-Object System.Drawing.Point(12, 372)
+$lblLog.Location = New-Object System.Drawing.Point(12, 440)
 $lblLog.Size = New-Object System.Drawing.Size(80, 18)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(12, 392)
-$txtLog.Size = New-Object System.Drawing.Size(592, 160)
+$txtLog.Location = New-Object System.Drawing.Point(12, 460)
+$txtLog.Size = New-Object System.Drawing.Size(592, 155)
 $txtLog.Multiline = $true
 $txtLog.ReadOnly = $true
 $txtLog.ScrollBars = 'Vertical'
@@ -166,12 +219,20 @@ $statusLabel.Text = '就绪'
 $status.Items.Add($statusLabel) | Out-Null
 
 $form.Controls.AddRange(@($btnScan, $lblBox, $lblList, $lst, $lblPwd, $txtPwd,
-                          $chkOpen, $btnCfg, $btnSync, $lblProg, $prog, $lblLog, $txtLog, $status))
+                          $chkOpen, $btnCfg, $btnSync, $btnDoctor, $lblQueue,
+                          $lblProg, $prog, $lblLog, $txtLog, $status))
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 400
 
 function Set-Status([string]$t) { $script:statusLabel.Text = $t }
+function Update-QueueLabel([string[]]$names) {
+    if ($names -and @($names).Count -gt 0) {
+        $script:lblQueue.Text = 'Word 里请选：' + (@($names) -join '  /  ')
+    } else {
+        $script:lblQueue.Text = 'Word 里请选：未识别到队列（用「体检」查看）'
+    }
+}
 function Append-Log([string]$t) {
     if (-not $t) { return }
     $script:txtLog.AppendText(($t.TrimEnd() + "`r`n"))
@@ -182,6 +243,7 @@ function Set-Busy([bool]$b, [string]$text) {
     $script:btnScan.Enabled = -not $b
     $script:btnCfg.Enabled  = -not $b
     $script:btnSync.Enabled = -not $b
+    $script:btnDoctor.Enabled = -not $b
     if ($b -and $text) { Set-Status $text }
 }
 
@@ -195,6 +257,20 @@ function Get-Progress {
     return @{ pct = [int]$last.Groups[1].Value; text = $last.Groups[2].Value }
 }
 
+# 同步跑一条引擎命令（只用于毫秒级的状态查询，不用于扫描）
+function Invoke-EngineSync {
+    param([string[]]$ArgList)
+    $out = Join-Path $env:TEMP 'xb_sync_check.json'
+    if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Force }
+    $call = @($script:Engine.Path) + @($script:Engine.Pre) + @($ArgList) + @('--json-out', $out)
+    $argStr = ($call | ForEach-Object { Quote $_ }) -join ' '
+    try { Invoke-Expression ("& " + $argStr + " *> `$null") } catch { }
+    if (Test-Path -LiteralPath $out) {
+        try { return (Get-Content -LiteralPath $out -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { }
+    }
+    return $null
+}
+
 function Start-Task {
     param([string[]]$PyArgs, [string]$Mode, [string]$BusyText)
     if ($script:Running) { return }
@@ -204,12 +280,18 @@ function Start-Task {
     Set-Busy $true $BusyText
     if (Test-Path -LiteralPath $script:JsonOut) { Remove-Item -LiteralPath $script:JsonOut -Force }
     if (Test-Path -LiteralPath $script:LogOut)  { Remove-Item -LiteralPath $script:LogOut  -Force }
-    $argStr = ($PyArgs | ForEach-Object { Quote $_ }) -join ' '
+    $call = @($script:Engine.Path) + @($script:Engine.Pre) + @($PyArgs) +
+            @('--json-out', $script:JsonOut, '--log-out', $script:LogOut)
+    $argStr = ($call | ForEach-Object { Quote $_ }) -join ' '
+    $envLine = if ($Mode -eq 'set+sync' -and $script:LastPwd) {
+        "`$env:XB_WIFI_PWD = " + (Quote $script:LastPwd)
+    } else { '' }
     $cmd = @"
 `$env:PYTHONIOENCODING='utf-8'
 `$env:PYTHONUTF8='1'
+$envLine
 Set-Location -LiteralPath $(Quote $script:Dir)
-& python $(Quote $script:PyScript) $argStr --json-out $(Quote $script:JsonOut) --log-out $(Quote $script:LogOut) *>&1 | Out-Null
+Invoke-Expression $(Quote ("& " + $argStr + " *>&1 | Out-Null"))
 "@
     $script:Ps = [PowerShell]::Create()
     [void]$script:Ps.AddScript($cmd)
@@ -235,6 +317,25 @@ function Handle-Output([string]$text) {
     }
     if (-not $j) { Set-Status '未拿到结果，看日志'; return }
 
+    if ($j.error -eq 'bluetooth_off') {
+        Set-Status '电脑蓝牙未打开（已尝试自动开启失败）'
+        [System.Windows.Forms.MessageBox]::Show(
+            "电脑蓝牙没有打开，程序已经尝试自动开启，但没有成功。`n`n" +
+            "接下来会自动打开 Windows 蓝牙设置，请把「蓝牙」开关打开后重试。",
+            '需要打开蓝牙', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+        try { Start-Process 'ms-settings:bluetooth' } catch { }
+        return
+    }
+    if ($j.error -eq 'bluetooth_absent') {
+        Set-Status '这台电脑没有蓝牙适配器'
+        [System.Windows.Forms.MessageBox]::Show(
+            "系统里没有找到蓝牙适配器。`n`n台式机常见：需要插一个 USB 蓝牙适配器。",
+            '没有蓝牙硬件', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+        return
+    }
+
     switch ($script:Mode) {
         'scan' {
             if ($j.ok) {
@@ -250,10 +351,26 @@ function Handle-Output([string]$text) {
                 Set-Status "扫描完成：共 $(@($j.ssids).Count) 个，其中 $hitN 个已记住密码"
             } else {
                 $script:prog.Value = 0
-                Set-Status '没扫到盒子'
-                [System.Windows.Forms.MessageBox]::Show(
-                    "没扫到盒子。请确认：`n  · 盒子已通电、距离较近`n  · 电脑蓝牙已打开`n  · 手机上的小白 App 没有占用蓝牙",
-                    '扫描失败') | Out-Null
+                if ($j.error -eq 'bluetooth_off') {
+                    Set-Status '电脑蓝牙未打开（已尝试自动开启失败）'
+                    [System.Windows.Forms.MessageBox]::Show(
+                        "电脑蓝牙没有打开，程序已经尝试自动开启，但没有成功。`n`n" +
+                        "接下来会自动打开 Windows 蓝牙设置，请把「蓝牙」开关打开，再回来点「扫描盒子」。",
+                        '需要打开蓝牙', [System.Windows.Forms.MessageBoxButtons]::OK,
+                        [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+                    try { Start-Process 'ms-settings:bluetooth' } catch { }
+                } elseif ($j.error -eq 'bluetooth_absent') {
+                    Set-Status '这台电脑没有蓝牙适配器'
+                    [System.Windows.Forms.MessageBox]::Show(
+                        "系统里没有找到蓝牙适配器。`n`n台式机常见：需要插一个 USB 蓝牙适配器。",
+                        '没有蓝牙硬件', [System.Windows.Forms.MessageBoxButtons]::OK,
+                        [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+                } else {
+                    Set-Status '没扫到盒子'
+                    [System.Windows.Forms.MessageBox]::Show(
+                        "没扫到盒子。请确认：`n  · 盒子已通电、距离较近`n  · 电脑蓝牙已打开`n  · 手机上的小白 App 没有占用蓝牙",
+                        '扫描失败') | Out-Null
+                }
             }
         }
         'set' {
@@ -268,6 +385,14 @@ function Handle-Output([string]$text) {
                 $net = if ($j.net_up) { '盒子已联网' } else { '盒子状态未确认' }
                 Set-Status "配网成功（$net），打印机端口已指向 $($j.ip)；已更新记忆"
             } else {
+                if ($j.error -in @('ble_connect_failed','ble_disconnected','ble_subscribe_failed','ble_timeout')) {
+                    Set-Status '蓝牙通信失败，配网未完成'
+                    [System.Windows.Forms.MessageBox]::Show(
+                        "配网没有完成：`n$($j.detail)`n`n$($j.hint)",
+                        '配网失败', [System.Windows.Forms.MessageBoxButtons]::OK,
+                        [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+                    return
+                }
                 $st = if ($null -ne $j.net_state) { "$($j.net_state)" } else { '未知' }
                 if ($j.ble_alive) {
                     Set-Status "配网失败（盒子联网状态=$st）；蓝牙还在线，可直接再配一次"
@@ -289,8 +414,23 @@ function Handle-Output([string]$text) {
             }
         }
         'sync' {
-            if ($j.ok) { Set-Status "打印机端口已指向 $($j.ip)" }
-            else { Set-Status '没找到盒子（按 MAC 匹配失败）' }
+            if ($j.ok) {
+                Set-Status "打印机端口已指向 $($j.ip)"
+                if ($j.queues) { Update-QueueLabel $j.queues }
+            }
+            else {
+                $why = if ($j.results -and @($j.results)[0].error) { @($j.results)[0].error }
+                       elseif ($j.hint) { $j.hint } else { $j.error }
+                Set-Status "同步失败：$why"
+            }
+        }
+        'queues' {
+            if ($j.queues) { Update-QueueLabel $j.queues }
+            Set-Status "已识别 $(@($j.queues).Count) 个打印队列"
+        }
+        'doctor' {
+            if ($j.conclusion) { Set-Status $j.conclusion }
+            if ($j.queues) { Update-QueueLabel $j.queues }
         }
     }
 }
@@ -319,6 +459,34 @@ $timer.Add_Tick({
 
 # ---------------- 事件 ----------------
 $btnScan.Add_Click({
+    # 扫描前先查蓝牙：关着就提醒，用户同意才自动打开
+    $oldCursor = $form.Cursor
+    try { $form.Cursor = 'WaitCursor' } catch { }
+    $bt = Invoke-EngineSync @('--bt-status', '--no-auto-on', '--json')
+    try { $form.Cursor = $oldCursor } catch { }
+
+    if ($bt -and $bt.state -eq 'absent') {
+        Set-Status '这台电脑没有蓝牙适配器'
+        [System.Windows.Forms.MessageBox]::Show(
+            "系统里没有找到蓝牙适配器。`n`n台式机常见：需要插一个 USB 蓝牙适配器。",
+            '没有蓝牙硬件', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+        return
+    }
+    if ($bt -and $bt.state -eq 'off') {
+        $r = [System.Windows.Forms.MessageBox]::Show(
+            "电脑蓝牙现在是关着的。`n`n" +
+            "点「是」：程序自动打开蓝牙，然后开始扫描。`n" +
+            "点「否」：打开 Windows 蓝牙设置，你自己打开。",
+            '蓝牙未打开', [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question)
+        if ($r -ne [System.Windows.Forms.DialogResult]::Yes) {
+            try { Start-Process 'ms-settings:bluetooth' } catch { }
+            Set-Status '已打开蓝牙设置，请手动打开后重试'
+            return
+        }
+        Set-Status '正在自动打开蓝牙并扫描 ...'
+    }
     $script:txtLog.Clear()
     $script:txtPwd.Clear()
     Start-Task -PyArgs @('--list', '--json', '--scan-time', '25') -Mode 'scan' -BusyText '正在扫描蓝牙（约 25 秒）...'
@@ -326,6 +494,11 @@ $btnScan.Add_Click({
 
 $btnSync.Add_Click({
     Start-Task -PyArgs @('--only-sync', '--json') -Mode 'sync' -BusyText '正在同步打印机端口...'
+})
+
+$btnDoctor.Add_Click({
+    $script:txtLog.Clear()
+    Start-Task -PyArgs @('--doctor', '--json') -Mode 'doctor' -BusyText '正在体检打印链路（约 5 秒）...'
 })
 
 # 选中列表里的 Wi-Fi -> 有记忆就自动填密码
@@ -376,13 +549,14 @@ $btnCfg.Add_Click({
     if ($open) {
         Start-Task -PyArgs @('--set-open', $ssid, '--json') -Mode 'set+sync' -BusyText '正在配网（开放网络），等待盒子接入...'
     } else {
-        Start-Task -PyArgs @('--set', $ssid, $pwd, '--json') -Mode 'set+sync' -BusyText '正在配网，等待盒子接入新网络...'
+        Start-Task -PyArgs @('--set-ssid', $ssid, '--json') -Mode 'set+sync' -BusyText '正在配网，等待盒子接入新网络...'
     }
 })
 
 $form.Add_Shown({
     Load-Hist
     Set-Status "就绪（已记住 $(@($script:Hist).Count) 个 Wi-Fi）"
+    Start-Task -PyArgs @('--queues', '--json') -Mode 'queues' -BusyText '正在识别打印队列...'
 })
 [void]$form.ShowDialog()
 $timer.Dispose()

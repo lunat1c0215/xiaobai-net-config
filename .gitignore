@@ -17,6 +17,10 @@ setpwd.txt
 # 构建产物
 build/
 dist/
+build_tmp/
+dist_new/
+发布/
+*.zip
 *.spec
 
 # Python / 编辑器 / 临时日志
