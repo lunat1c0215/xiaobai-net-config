@@ -52,7 +52,7 @@
 <div class="page">
 
 <h1>小白盒子配网工具 · 使用说明</h1>
-<p class="sub">适用设备：XB900WB / XB94 系列小白盒子 · 版本 2.0.1</p>
+<p class="sub">适用设备：XB900WB / XB94 系列小白盒子 · 版本 2.0.2</p>
 
 <div class="box note">
   <strong>一句话：</strong>让盒子连上 Wi-Fi，并把你电脑里<strong>已经装好的那台打印机</strong>指到盒子的新地址。
@@ -191,18 +191,25 @@
   <tr><th>内容</th><th>位置</th></tr>
   <tr><td>盒子与打印机配置</td><td><code>%LOCALAPPDATA%\XiaobaiBox\config.json</code></td></tr>
   <tr><td>Wi-Fi 记忆（加密）</td><td><code>%LOCALAPPDATA%\XiaobaiBox\wifi_history.json</code></td></tr>
+  <tr><td>运行日志（保留最近 10 份）</td><td><code>%LOCALAPPDATA%\XiaobaiBox\logs\</code></td></tr>
+  <tr><td>诊断包</td><td>点「导出诊断包」，默认存到桌面 <code>小白盒子诊断-时间.zip</code></td></tr>
 </table>
 <p>Wi-Fi 密码用 Windows 当前账户加密，换账户或换电脑后无法解密。删除上面两个文件即可恢复初始状态。</p>
 
-<h2>八、卸载</h2>
+<div class="box tip">
+  出问题先点面板上的「导出诊断包」，把 zip 发给维护者。里面有版本、配置、体检结果、队列信息和日志，不包含 Wi-Fi 密码。
+</div>
+
+<h2>八、安装与卸载</h2>
+<p><b>安装：</b>解压后双击 <code>安装.cmd</code>，会装到当前用户的 <code>%LOCALAPPDATA%\Programs\XiaobaiBox</code>，不需要管理员权限，并创建桌面和开始菜单快捷方式。也可以不安装，直接双击 <code>启动小白配网工具.vbs</code> 使用。</p>
 <ol>
-  <li>删除整个程序文件夹。</li>
-  <li>删除 <code>%LOCALAPPDATA%\XiaobaiBox</code>（可选，会清掉 Wi-Fi 记忆）。</li>
+  <li><b>卸载：</b>设置 → 应用 → 小白盒子配网工具 → 卸载；或运行程序目录里的 <code>卸载.cmd</code>。</li>
+  <li>想连 Wi-Fi 记忆一起清掉，用 <code>卸载.cmd -PurgeData</code>，或手动删除 <code>%LOCALAPPDATA%\XiaobaiBox</code>。</li>
   <li>打印机队列和端口不需要还原，Windows 里仍是原来那台打印机。</li>
 </ol>
 
 <div class="footer">
-  小白盒子配网工具 2.0.1 · 本说明随程序一起分发，可打印。
+  小白盒子配网工具 2.0.2 · 本说明随程序一起分发，可打印。
   仓库：github.com/lunat1c0215/xiaobai-net-config
 </div>
 

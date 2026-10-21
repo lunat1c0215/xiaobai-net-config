@@ -52,6 +52,7 @@ except Exception:
     _Radio = _RadioKind = _RadioState = None
 
 APP = "XiaobaiBox"
+__version__ = "2.0.2"
 CH_WRITE = "16fe0d80-c500-11e3-b8c8-0002a5d5c51b"
 CH_NOTIFY = "1c927b50-c500-11e3-8a33-0800200c9a66"
 CH_NOTIFY2 = "1c927b50-c500-91e3-8a33-0800200c9a66"
@@ -84,6 +85,7 @@ def valid_ip(text: str) -> bool:
 EMIT_JSON = False
 JSON_OUT = None
 LOG_OUT = None
+LOG_PATH = None
 
 # 被管道/重定向时应输出 UTF-8，避免中文在 GBK 控制台里变乱码
 try:
@@ -177,8 +179,10 @@ def emit_result(obj: dict) -> None:
 
 
 class _Tee:
-    def __init__(self, path: str):
-        self.f = open(path, "w", encoding="utf-8", buffering=1)
+    def __init__(self, paths):
+        if isinstance(paths, str):
+            paths = [paths]
+        self.files = [open(p, "w", encoding="utf-8", buffering=1) for p in paths]
         self.orig = sys.stdout
 
     def write(self, s):
@@ -186,18 +190,29 @@ class _Tee:
             self.orig.write(s)
         except Exception:
             pass
-        try:
-            self.f.write(s)
-        except Exception:
-            pass
+        for f in self.files:
+            try:
+                f.write(s)
+            except Exception:
+                pass
         return len(s)
 
     def flush(self):
-        for f in (self.orig, self.f):
+        for f in [self.orig] + self.files:
             try:
                 f.flush()
             except Exception:
                 pass
+
+
+def rotate_logs(keep: int = 10) -> None:
+    try:
+        logs = sorted((app_dir() / "logs").glob("xiaobai-*.log"),
+                      key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in logs[keep:]:
+            old.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -1174,9 +1189,73 @@ def cmd_pair(cfg, args) -> int:
     return asyncio.run(run())
 
 
+def cmd_diagnostics(cfg, args) -> int:
+    """把排查需要的东西打成一个 zip，用户发过来就能定位。"""
+    import platform
+    import zipfile
+
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    target = args.diagnostics
+    if target is True or not target:
+        desktop = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
+        if not desktop.exists():
+            desktop = app_dir()
+        target = desktop / f"xiaobai-diag-{ts}.zip"
+    target = Path(target)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    doc = doctor(cfg)
+    print_doctor(doc)
+    printers = get_printers()
+    ports = get_ports()
+    bt = asyncio.run(bt_status(auto_on=False))
+    info = "\n".join([
+        f"version: {__version__}",
+        f"time: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"platform: {platform.platform()}",
+        f"python: {sys.version.split()[0]}",
+        f"frozen: {getattr(sys, 'frozen', False)}",
+        f"exe: {sys.executable}",
+        f"cwd: {os.getcwd()}",
+        f"admin: {is_admin()}",
+        f"local_ipv4: {local_ipv4_all()}",
+        f"bluetooth: {bt}",
+        f"log: {LOG_PATH or '(none)'}",
+    ])
+    tail = ""
+    try:
+        if LOG_PATH and Path(LOG_PATH).exists():
+            tail = Path(LOG_PATH).read_text(encoding="utf-8", errors="replace")[-120000:]
+    except Exception:
+        pass
+
+    try:
+        with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("info.txt", info)
+            z.writestr("config.json", json.dumps(cfg, ensure_ascii=False, indent=2))
+            z.writestr("doctor.json", json.dumps(doc, ensure_ascii=False, indent=2))
+            z.writestr("printers.json",
+                       json.dumps({"printers": printers, "ports": ports},
+                                  ensure_ascii=False, indent=2))
+            z.writestr("log.txt", tail)
+    except Exception as exc:
+        res = fail("diag_failed", f"{type(exc).__name__}: {exc}", "换一个可写目录重试")
+        log("[X] " + res["detail"])
+        emit_result(res)
+        return 1
+
+    log("[+] 诊断包已生成: " + str(target))
+    emit_result({"ok": True, "mode": "diagnostics", "path": str(target)})
+    return 0
+
+
 def main() -> int:
-    global EMIT_JSON, JSON_OUT
+    global EMIT_JSON, JSON_OUT, LOG_PATH
     ap = argparse.ArgumentParser(description="小白盒子配网 + 打印机端口工具（可分发版）")
+    ap.add_argument("--version", action="version", version=f"XiaobaiBox {__version__}")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--list", action="store_true", help="读盒子扫到的 Wi-Fi 列表")
     g.add_argument("--set", nargs=2, metavar=("SSID", "PASSWORD"), help="配网")
@@ -1190,6 +1269,8 @@ def main() -> int:
     g.add_argument("--watch", action="store_true", help="后台守护，IP 变化自动修端口")
     g.add_argument("--bt-status", action="store_true",
                    help="检查电脑蓝牙；关着会自动尝试打开")
+    g.add_argument("--diagnostics", nargs="?", const=True, metavar="ZIP",
+                   help="生成诊断包（默认保存到桌面）")
 
     ap.add_argument("--queue", action="append", help="指定队列名（可多次；默认自动反查）")
     ap.add_argument("--ip", help="直接指定盒子 IP")
@@ -1213,8 +1294,17 @@ def main() -> int:
 
     EMIT_JSON = args.json
     JSON_OUT = args.json_out
+    log_dir = app_dir() / "logs"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    LOG_PATH = str(log_dir / f"xiaobai-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.log")
+    paths = [LOG_PATH]
     if args.log_out:
-        sys.stdout = _Tee(args.log_out)
+        paths.append(args.log_out)
+    sys.stdout = _Tee(paths)
+    rotate_logs(10)
 
     cfg = load_config()
 
@@ -1240,6 +1330,9 @@ def main() -> int:
             log("    " + st["hint"])
         emit_result({"mode": "bt", **st})
         return 0 if st.get("state") == "on" else 1
+
+    if args.diagnostics is not None:
+        return cmd_diagnostics(cfg, args)
 
     if args.queues:
         printers = get_printers()

@@ -5,7 +5,9 @@
 
 ## 下载
 
-[GitHub Releases](https://github.com/lunat1c0215/xiaobai-net-config/releases/latest) → `xiaobai-net-config-2.0.1.zip`
+[GitHub Releases](https://github.com/lunat1c0215/xiaobai-net-config/releases/latest) → `xiaobai-net-config-2.0.2.zip`
+
+校验：同目录的 `SHA256SUMS-2.0.2.txt`。许可证：MIT（见 `LICENSE`）。
 
 ## 分发形态
 
@@ -17,15 +19,28 @@
   修复打印队列.ps1          作业卡死时才用
   使用说明.html            完整图文说明（面板按钮直接打开）
   发布说明.txt
+  安装.cmd / 卸载.cmd       安装到当前用户、免管理员
+  LICENSE / CHANGELOG.md / 发布检查单.md
+  SHA256SUMS-2.0.2.txt
 ```
 
 双击 `启动小白配网工具.vbs` 即可。目标机不需要装 Python。
+
+安装（可选，免管理员）：
+
+```powershell
+.\安装.cmd              # 装到 %LOCALAPPDATA%\Programs\XiaobaiBox + 快捷方式
+.\卸载.cmd              # 卸载；加 -PurgeData 连 Wi-Fi 记忆一起清
+```
 
 重新打包：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\打包发布.ps1
 ```
+
+版本号只从 `xiaobai_box.py` 的 `__version__` 读取，脚本不再手写版本。构建依赖见
+`requirements-build.txt`，运行依赖见 `requirements.txt`。
 
 ## 不写死任何本机配置
 
@@ -37,6 +52,7 @@ powershell -ExecutionPolicy Bypass -File .\打包发布.ps1
 | 队列兜底 | 配置里记住的队列 → 同一失效 IP 上的队列组 → 唯一 9100 队列 |
 | 配置 | `%LOCALAPPDATA%\XiaobaiBox\config.json` |
 | Wi-Fi 记忆 | `%LOCALAPPDATA%\XiaobaiBox\wifi_history.json`（DPAPI，仅当前用户可解） |
+| 日志 | `%LOCALAPPDATA%\XiaobaiBox\logs\xiaobai-<时间>-<pid>.log`（保留 10 份） |
 
 ## 命令
 
@@ -48,6 +64,8 @@ XiaobaiBox.exe --sync                      # 只修端口（换 IP 后最常用�
 XiaobaiBox.exe --doctor                    # 结论式体检
 XiaobaiBox.exe --queues                    # 看自动认出的队列
 XiaobaiBox.exe --watch                     # 守护：IP 变化自动修端口
+XiaobaiBox.exe --version                   # 版本
+XiaobaiBox.exe --diagnostics [ZIP]         # 导出诊断包（默认存桌面）
 ```
 
 常用开关：

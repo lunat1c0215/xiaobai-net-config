@@ -14,6 +14,16 @@ btvm*.txt
 setpwd.txt
 *.dex
 
+# 开发期分析脚本（只保留本机，不入库、不随包分发）
+ble_config.py
+ble_watch.py
+watch_state.py
+box_recon.ps1
+serial_log.ps1
+ssid_str.py
+dex*.py
+体检打印链路.ps1
+
 # 构建产物
 build/
 dist/

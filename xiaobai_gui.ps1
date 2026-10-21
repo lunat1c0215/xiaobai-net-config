@@ -7,6 +7,14 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Security
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
+# 高分屏下不做位图拉伸，避免界面发糊（Win10 1703+）
+try {
+    Add-Type -Namespace Win32 -Name DpiHelper -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+'@
+    [void][Win32.DpiHelper]::SetProcessDpiAwarenessContext([IntPtr]-4)
+} catch { }
+
 $script:Dir      = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $script:PyScript = Join-Path $script:Dir 'xiaobai_box.py'
 $script:JsonOut  = Join-Path $env:TEMP 'xb_ble_result.json'
@@ -130,6 +138,8 @@ $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox   = $false
 $form.Font          = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+$form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
+$form.AutoScaleDimensions = New-Object System.Drawing.SizeF(96, 96)
 
 $btnScan = New-Object System.Windows.Forms.Button
 $btnScan.Text = '扫描盒子'
@@ -187,6 +197,18 @@ $btnHelp.Text = '使用说明'
 $btnHelp.Location = New-Object System.Drawing.Point(486, 298)
 $btnHelp.Size = New-Object System.Drawing.Size(122, 34)
 
+$btnDiag = New-Object System.Windows.Forms.Button
+$btnDiag.Text = '导出诊断包'
+$btnDiag.Location = New-Object System.Drawing.Point(12, 346)
+$btnDiag.Size = New-Object System.Drawing.Size(110, 26)
+
+$lblVersion = New-Object System.Windows.Forms.Label
+$lblVersion.Text = 'v2.x'
+$lblVersion.Location = New-Object System.Drawing.Point(500, 352)
+$lblVersion.Size = New-Object System.Drawing.Size(108, 18)
+$lblVersion.TextAlign = 'MiddleRight'
+$lblVersion.ForeColor = [System.Drawing.Color]::Gray
+
 $lblQueue = New-Object System.Windows.Forms.Label
 $lblQueue.Text = 'Word 里选：自动识别中…'
 $lblQueue.Location = New-Object System.Drawing.Point(12, 382)
@@ -224,7 +246,8 @@ $statusLabel.Text = '就绪'
 $status.Items.Add($statusLabel) | Out-Null
 
 $form.Controls.AddRange(@($btnScan, $lblBox, $lblList, $lst, $lblPwd, $txtPwd,
-                          $chkOpen, $btnCfg, $btnSync, $btnDoctor, $btnHelp, $lblQueue,
+                          $chkOpen, $btnCfg, $btnSync, $btnDoctor, $btnHelp,
+                          $btnDiag, $lblVersion, $lblQueue,
                           $lblProg, $prog, $lblLog, $txtLog, $status))
 
 $timer = New-Object System.Windows.Forms.Timer
@@ -249,6 +272,7 @@ function Set-Busy([bool]$b, [string]$text) {
     $script:btnCfg.Enabled  = -not $b
     $script:btnSync.Enabled = -not $b
     $script:btnDoctor.Enabled = -not $b
+    $script:btnDiag.Enabled = -not $b
     if ($b -and $text) { Set-Status $text }
 }
 
@@ -437,6 +461,14 @@ function Handle-Output([string]$text) {
             if ($j.conclusion) { Set-Status $j.conclusion }
             if ($j.queues) { Update-QueueLabel $j.queues }
         }
+        'diag' {
+            if ($j.ok) {
+                Set-Status "诊断包已保存：$($j.path)"
+                try { Start-Process explorer.exe -ArgumentList "/select,`"$($j.path)`"" } catch { }
+            } else {
+                Set-Status "诊断包生成失败：$($j.error)"
+            }
+        }
     }
 }
 
@@ -520,6 +552,10 @@ $btnHelp.Add_Click({
     }
 })
 
+$btnDiag.Add_Click({
+    Start-Task -PyArgs @('--diagnostics', '--json') -Mode 'diag' -BusyText '正在生成诊断包（约 5 秒）...'
+})
+
 # 选中列表里的 Wi-Fi -> 有记忆就自动填密码
 $lst.Add_SelectedIndexChanged({
     if ($script:lst.SelectedIndex -lt 0) { return }
@@ -574,6 +610,14 @@ $btnCfg.Add_Click({
 
 $form.Add_Shown({
     Load-Hist
+    try {
+        $eargs = @($script:Engine.Pre) + @('--version')
+        $v = (& $script:Engine.Path @eargs 2>$null | Out-String).Trim()
+        if ($v -match 'XiaobaiBox\s+(\S+)') {
+            $script:lblVersion.Text = 'v' + $Matches[1]
+            $form.Text = "小白盒子配网工具 v$($Matches[1])"
+        }
+    } catch { }
     Set-Status "就绪（已记住 $(@($script:Hist).Count) 个 Wi-Fi）"
     Start-Task -PyArgs @('--queues', '--json') -Mode 'queues' -BusyText '正在识别打印队列...'
 })
