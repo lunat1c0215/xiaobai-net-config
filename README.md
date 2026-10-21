@@ -3,6 +3,10 @@
 给 XB9 系列小白盒子用：BLE 配网 → 找到盒子 IP → 把 Windows 里**已有的**打印队列端口改到新 IP。
 不创建打印机、不装驱动、不碰 Word 设置；Word 里原来选哪台，修完还是那台。
 
+## 下载
+
+[GitHub Releases](https://github.com/lunat1c0215/xiaobai-net-config/releases/latest) → `xiaobai-net-config-2.0.0.zip`
+
 ## 分发形态
 
 ```
